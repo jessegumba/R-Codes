@@ -1,5 +1,5 @@
 ---
-title: "Operations Analytics"
+title: "Operations Analytics - k-means Cluster Analysis"
 author: "Jessica Gumba"
 date: '2022-07-13'
 output:
