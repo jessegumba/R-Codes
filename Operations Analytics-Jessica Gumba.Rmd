@@ -1,0 +1,201 @@
+---
+title: "Operations Analytics"
+author: "Jessica Gumba"
+date: '2022-07-13'
+output:
+  word_document: default
+  pdf_document: default
+  html_document: default
+---
+
+#### Initialization. Load casino data and view the summary statistics.
+```{r setup, echo=FALSE, warning=FALSE, message=FALSE}
+library(readr)
+library(tidyr)
+library(tidyverse)
+library(dplyr)
+library(scales)
+library(ggplot2)
+library(cowplot)
+library(ClusterR)
+library(cluster)
+library(car)
+library(readxl)
+library(grid)
+
+setwd("/Volumes/GoogleDrive/My Drive/01 Modules/021 Operations Analytics/pre-module/assignment")
+casino<-read_excel("casino.xlsx")
+
+#Drop trailing NA rows that are loaded with the dataset
+casino <- na.omit(casino)
+
+str(casino)
+```
+
+#### 1. Here, we can see the total spend of the customers per game. 
+On average, players spent the most on Slots, Blackjack and Craps, with the total spend for each game exceeding $1.3M million.
+On the other hand, players spent the least on Poker and Bingo, where the total player spend per game is less than $280 thousand.
+
+```{r Total Spend per Game, echo=FALSE, warning=FALSE, message=FALSE}
+## Create the data for the bar chart
+spendpergame <- casino[,2:8] %>% gather(1:7, key="game", value="pergamespend")
+spendpergame$game<- factor(spendpergame$game, levels = c("Slots", "BJ", "Craps", "Bac", "Bingo", "Poker", "Other"))
+spendpergame <- aggregate(spendpergame$pergamespend, FUN="sum", by = list(spendpergame$game), na.rm=TRUE)
+spendpergame <- spendpergame %>% rename(Game=`Group.1`, `Total Spend`= x)
+
+ggplot(spendpergame, aes(x=Game, y=`Total Spend`)) + geom_bar(stat='identity',fill="#4cbea3",color ="#ffffff") + geom_text(aes(label=scales::dollar(`Total Spend`), vjust = -1)) +ylim(0,1600000) +ggtitle("Total money spent per game ($)")
+```
+
+#### 2a. Next, we will examine the spending behaviour of the customers per game.
+Slots, Blackjack, Craps, Baccarat, Poker and Other games all show a similar pattern: majority of the players would spend lower for each games.
+The histogram for Bingo seem to follow a normal distribution, with majority of the players spending around $100 per game (which appears to be the median \$spend).
+
+```{r PlayersPerGame, echo=FALSE, warning=FALSE, message=FALSE}
+# Store plots into vars, subset to exclude player where <Game> = 0, such that those records are included from the histogram frequency count
+p1 <- ggplot(subset(x=casino, subset=Slots!=0), aes(x=Slots)) + geom_histogram(binwidth = 50,fill="#4cbea3",color="white") + labs(x="Amount spent ($)", y="Players") + ggtitle ("Slots")
+p2 <- ggplot(subset(x=casino, subset=BJ!=0), aes(x=BJ)) + geom_histogram(binwidth = 300,fill="#4cbea3",color="white")  + labs(x="Amount spent ($)", y="Players") + ggtitle ("Blackjack")
+p3 <- ggplot(subset(x=casino, subset=Craps!=0), aes(x=Craps)) + geom_histogram(binwidth = 200,fill="#4cbea3",color="white") + labs(x="Amount spent ($)", y="Players") + ggtitle ("Craps")
+p4 <- ggplot(subset(x=casino, subset=Bac!=0), aes(x=Bac)) + geom_histogram(binwidth = 100,fill="#4cbea3",color="white") + labs(x="Amount spent ($)", y="Players") + ggtitle ("Baccarat")
+p5 <- ggplot(subset(x=casino, subset=Bingo!=0), aes(x=Bingo)) + geom_histogram(binwidth = 10,fill="#4cbea3",color="white") + labs(x="Amount spent ($)", y="Players") + ggtitle ("Bingo")
+p6 <- ggplot(subset(x=casino, subset=Poker!=0), aes(x=Poker)) + geom_histogram(binwidth = 50,fill="#4cbea3",color="white") + labs(x="Amount spent ($)", y="Players") + ggtitle ("Poker")
+p7 <- ggplot(subset(x=casino, subset=Other!=0), aes(x=Other)) + geom_histogram(binwidth = 50,fill="#4cbea3",color="white") + labs(x="Amount spent ($)", y="Players") + ggtitle ("Other")
+plot_grid(p1, p2, p3, p4, p5, p6, p7, main = "test")
+
+```
+
+#### 2b. Let's zoom into the distribution of the top spenders for each game.
+Since **majority** of players wager **small** amounts of money on each game, it is difficult to visualize the pattern among players who spend higher. In this next chart, we will filter out the majority class by adjusting the axis limits (`xlim`) and focus only on games where players spent much higher than average. Note: Cut-offs were set arbitrarily based on visual inspection from the chart above.
+
+```{r PlayersPerGameB, echo=FALSE, warning=FALSE, message=FALSE}
+p1b <- ggplot(subset(x=casino, subset=Slots!=0), aes(x=Slots)) + geom_histogram(binwidth = 30,fill="#7eb0d5",color="white") + labs(x="$Spent (>$1000)", y="Players") + ggtitle ("Slots")  + xlim(1000,2000)
+p2b <- ggplot(subset(x=casino, subset=BJ!=0), aes(x=BJ)) + geom_histogram(binwidth = 200,fill="#7eb0d5",color="white")  + labs(x="$Spent (>$1500)", y="Players") + ggtitle ("Blackjack") + xlim(1500,7000)
+p3b <- ggplot(subset(x=casino, subset=Craps!=0), aes(x=Craps)) + geom_histogram(binwidth = 200,fill="#7eb0d5",color="white") + labs(x="$Spent (>$1500)", y="Players") + ggtitle ("Craps") + xlim(1500,7000)
+p4b <- ggplot(subset(x=casino, subset=Bac!=0), aes(x=Bac)) + geom_histogram(binwidth = 100,fill="#7eb0d5",color="white") + labs(x="$Spent (>$500)", y="Players") + ggtitle ("Baccarat") + xlim(500,2500)
+p5b <- ggplot(subset(x=casino, subset=Bingo!=0), aes(x=Bingo)) + geom_histogram(binwidth = 10,fill="#7eb0d5",color="white") + labs(x="$Spent", y="Players") + ggtitle ("Bingo")
+p6b <- ggplot(subset(x=casino, subset=Poker!=0), aes(x=Poker)) + geom_histogram(binwidth = 20,fill="#7eb0d5",color="white") + labs(x="$Spent (>$400)", y="Players") + ggtitle ("Poker")+ xlim(400,800)
+p7b <- ggplot(subset(x=casino, subset=Other!=0), aes(x=Other)) + geom_histogram(binwidth = 20,fill="#7eb0d5",color="white") + labs(x="$Spent (>$500)", y="Players") + ggtitle ("Other")+ xlim(500,1000)
+plot_grid(p1b, p2b, p3b, p4b, p5b, p6b, p7b, main = "test")
+```
+
+From this new chart, we can see more clearly the distribution of high-spending players based on their $ spend.
+
+* **Blacjack** & **Craps** follow a normal distribution with most of its high-spenders falling close to the total median spend of around `$4000`.
+* The histograms for **Slots**, **Baccarat** and **Other** game types are skewed to the right.
+* Distribution for **Poker** appears to be bimodal in nature, peaking at around `$500` & `$600`
+* **Bingo** - no changes were made to the axis limits.
+
+#### 3. In preparation for the k-means clustering, we will normalize the dataset & then view the summary statistics.
+```{r k-means clustering, warning=FALSE, message=FALSE, echo=FALSE}
+# Data Transformation
+
+# For this part of the assignment, the main guide used was Brett Lantz' book, Machine Learning with R, unless otherwise specified
+
+#Remove player ID & total spend as we do not need these in the clustering
+casino_x = casino %>% select(-c("Player", "Total Spend"))
+
+# Normalize the features by introducing a normalize function. Subsequently use lapply to apply the function to each list element
+normalize <- function(x) {return ((x - min(x)) / (max(x) - min(x)))}
+casino_x_normalized<-as.data.frame(lapply(casino_x, normalize))
+
+# use kmeans() function to create the clusters with 3, 4, 5 & 6 centers
+set.seed(1234)
+clusters3 <- kmeans(casino_x_normalized, 3)
+clusters4 <- kmeans(casino_x_normalized, 4)
+clusters5 <- kmeans(casino_x_normalized, 5)
+clusters6 <- kmeans(casino_x_normalized, 6)
+```
+
+```{r normalized dataset, warning=FALSE}
+summary(casino_x_normalized$Slots)
+summary(casino_x_normalized$BJ)
+summary(casino_x_normalized$Craps)
+summary(casino_x_normalized$Bac)
+summary(casino_x_normalized$Bingo)
+summary(casino_x_normalized$Poker)
+summary(casino_x_normalized$Other)
+```
+
+
+### 3a. Results of k-means cluster analysis
+
+#### i. First run: 3 clusters
+* By examining the cluster centers, we can see that spenders in games Slots, BlackJack, Craps & Baccarat are dominant in **Cluster 1**. At the same time, this is the smallest cluster with only 263 players included. 
+* **Cluster 2** consists mostly of Slots, Bingo & other games' players.
+* **Cluster 3** is the biggest cluster with 3636 players yet not the most exceptional, its members have consistently much lower than average spend across all games.
+
+```{r 3clusters, warning=FALSE, message=FALSE}
+clusters3$size
+clusters3$centers
+```
+
+#### ii. Second run: 4 clusters
+* By examining the cluster centers, we can see that spenders in games Slots, BlackJack, Craps & Baccarat are dominant in **Cluster 1**, consistent with the results from our first clustering run. At the same time, this is still the smallest cluster with only 263 players included. 
+* **Cluster 2** is the biggest cluster with 3167 players included and its members have consistently much lower than average spend across all games.
+* **Cluster 3** is dominated by Bingo and then Slots players, and
+* **Cluster 4** consists of players of Other games, but also some Slots & Poker players. A small proportion of players of the other games are also in this cluster.
+
+```{r 4clusters, warning=FALSE, message=FALSE}
+clusters4$size
+
+clusters4$centers
+```
+
+
+#### iii. Third run: 5 clusters
+* **Cluster 1** is  the smallest cluster with 99 players, dominated by Poker players.
+* **Cluster 2** consists mostly of players of Other games, followed by Slots & Poker players.
+* **Cluster 3** is the biggest cluster with 3071 players included and its members have consistently much lower than average spend across all games.
+* **Cluster 4** is dominated by Slots, Blackjack, Craps and Baccarat players, and
+* **Cluster 5** by Bingo and then Slots players
+
+```{r 5clusters, warning=FALSE, message=FALSE}
+clusters5$size
+clusters5$centers
+```
+
+#### iv. Fourth run: 6 clusters
+* **Cluster 1** consists mostly of Slots players
+* **Cluster 2** consists mostly of players of "Other" games, with a small proportion who are spenders for the other 6 games.
+* **Cluster 3** is dominated by Slots, Blackjack, Craps and Baccarat players
+* **Cluster 4** consists mostly of Slots players, with a small proportion who are spenders for the other 6 games.
+* **Cluster 5** is the biggest cluster with 2789 players. Yet again, this captures those whose behaviour is unexceptional: its members have consistently much lower than average spend across all games.
+* **Cluster 6** consists mostly of players of "Other" games, with a significant proportion of Slots and Poker players as well
+```{r 6clusters, warning=FALSE, message=FALSE}
+clusters6$size
+clusters6$centers
+```
+
+### 3b. Scatterplot matrix of every game combination at k=6 (using scatterplotMatrix)
+* There is **very strong positive correlation** between the Slots, Blackjack, Craps and Baccarat pairs
+* There is also **strong positive correlation** between Poker & Other games
+
+```{r plotcluster6, warning=FALSE, message=FALSE, echo=FALSE}
+#Add the cluster number in each row in the original dataset
+casino$Cluster3 <- clusters3$cluster
+casino$Cluster4 <- clusters4$cluster
+casino$Cluster5 <- clusters5$cluster
+casino$Cluster6 <- clusters6$cluster # This will be used in the plots, but the formula below can be easily tweaked to see results for clusters with 3, 4 and 5 centers
+
+# Generate correlation matrix
+cor(casino_x_normalized)
+
+# Plot using scatterplotMatrix
+scatterplotMatrix( ~ Slots + BJ + Craps + Bac + Bingo + Poker + Other, data = casino,main="Scatterplot Matrix for Every Pair of Games")
+
+```
+
+### 3c. Scatterplot matrix of every game combination at k=6 (using pairs)
+Alternatively, here is a scatterplot using the function `pairs`. We can clearly see clusters 1-6 and where they fall on each scatterplot-pair. Results are consistent with our analysis from Part (3a) - Results of k-means cluster analysis.
+```{r plotcluster6-alt, warning=FALSE, message=FALSE, echo=FALSE}
+# Alternatively, create a plot with each point color varying based on the cluster number
+# Source: https://stackoverflow.com/questions/22201325/how-to-add-a-non-overlapping-legend-to-associate-colors-with-categories-in-pairs
+pairs(casino[c("Slots", "BJ","Craps", "Bac", "Bingo", "Poker", "Other")], 
+      col = casino$Cluster6,
+      cex = 0.2,
+      oma=c(4,4,5,12),
+      main = "Station Casino Data - Cluster Analysis")
+par(xpd = TRUE)
+legend( "bottomright", fill = unique(as.factor(casino$Cluster6)), legend = c(levels(as.factor(casino$Cluster6))))
+
+```
+
