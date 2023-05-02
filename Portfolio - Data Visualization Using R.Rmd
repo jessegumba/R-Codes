@@ -1,0 +1,207 @@
+---
+title: "Data Visualization using R"
+author: "Jessica Gumba"
+date: "2022-12-01"
+output:
+  html_document: default
+  word_document: default
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+library("readr")
+library("ggplot2")
+library("skimr")
+library("dplyr")
+
+setwd("~/Library/CloudStorage/GoogleDrive-jcg9261@stern.nyu.edu/My Drive/01 Modules/033 Data Visualization/premod/Exercises/Lesson 5")
+bikeshare <- read.csv("bikesharedailydata.csv")
+```
+
+```{r clean_data, include=FALSE}
+skim(bikeshare)
+# After skimming, we can see that `season` and `mnth` have missing data, let's see which specific rows have NAs
+
+#=== Season ====
+bikeshare[is.na(bikeshare$season),]
+# We can see that "Season" is missing for one record: January 7, 2011. To correct this, we will replace NA with 1 = Winter season. This is also consistent with the other days within January for the same dataset.
+bikeshare[is.na(bikeshare$season),]$season <- "1"
+
+#=== Month ====
+bikeshare[is.na(bikeshare$mnth),]
+# We can see that "Month" is missing for one record: January 10, 2011. To correct this, we will replace NA with 1 since this date falls on the first month of the year, which is January.
+bikeshare[is.na(bikeshare$mnth),]$mnth <- "1"
+
+```
+
+## Bar chart
+```{r barchart}
+# Change month to factor
+bikeshare$mnth<-factor(bikeshare$mnth, levels=c("1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12"))
+
+# Format year: Change 0 to 2011 & 1 to 2012
+bikeshare$yr_format<-NA
+bikeshare <- bikeshare %>% mutate(yr_format = as.factor(ifelse(yr==0, "2011", "2012")))
+
+ggplot(data=bikeshare, aes(x=mnth, y=cnt/10000, fill=yr_format)) +
+  geom_bar(stat="identity", position="stack") +
+  #geom_col(position="dodge") +
+  labs(title = "Total Number of Rental Bike Users per Month & Year", 
+       subtitle = "The number of rental bike users have significantly increased in\nthe year 2012. Within each year during summer, these numbers\nrose & then dropped by end of year during winter.", 
+       caption = "Bikeshare data from 2011 & 2012", 
+       x = "Month Number", 
+       y = "Count of Rental Bikes (x 1000 bikes)",
+       fill = "Year") + # Legend Title
+  scale_fill_manual(values=c("#9999CC", "#66CC99")) +
+  scale_y_continuous () +
+  theme(panel.border = element_blank(), 
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(), 
+        text = element_text(family="Palatino"),
+        axis.line = element_line(colour = "black"))
+
+```
+
+## Line chart
+
+```{r}
+# Convert dteday from char to datetime
+bikeshare$dteday_format <- as.Date(bikeshare$dteday, format="%m/%d/%y")
+
+ggplot(data=bikeshare[bikeshare$yr_format=="2011",], aes(x=dteday_format, y=hum, group=1)) +
+  geom_line(colour="#9999CC") + 
+  labs(title = "Daily Humidity for Year 2011", 
+       subtitle = "Humidity constantly fluctuated throughout 2011. Most notably,\nthere was a significant drop in recorded humidity during March \nof that year.", 
+       caption = "Bikeshare data from 2011 & 2012", 
+       x = "Day", 
+       y = "Normalized Humidity") + # Legend Title
+  theme(panel.border = element_blank(), 
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(), 
+        text = element_text(family="Palatino"),
+        axis.line = element_line(colour = "black"))
+```
+
+## Stacked area
+```{r}
+df<-aggregate(x=bikeshare$casual,
+              by = list(unique.values = bikeshare$mnth, unique.values = bikeshare$yr_format),
+              FUN = sum)
+colnames(df) <- c("mnth","yr_format","casual_agg")
+df$mnth<-as.integer(paste(df$mnth))
+
+ggplot(df, aes(x=mnth, y=casual_agg/1000, fill=yr_format)) + 
+  geom_area() +
+  labs(title = "Total Number of Casual Users per Month & Year", 
+       subtitle = "Both years showed the same pattern in the rise & decline in the \nnumber of casual users. This could be explained by seasonality, \nas the number hiked up mid-year during summer.", 
+       caption = "Bikeshare data from 2011 & 2012", 
+       x = "Month Number", 
+       y = "Count of Casual Users (per 1,000)",
+       fill = "Year") + # Legend Title
+  scale_fill_manual(values=c("#9999CC", "#66CC99")) +
+  scale_x_continuous(breaks=c(1,2,3,4,5,6,7,8,9,10,11,12)) + # to force axis labels to stay as integers
+  theme(panel.border = element_blank(), 
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(), 
+        text = element_text(family="Palatino"),
+        axis.line = element_line(colour = "black"))
+```
+
+## Histogram
+```{r}
+ggplot(data=bikeshare[bikeshare$yr_format=="2012",], 
+       aes(x=temp*41)) + # De-normalize Temperature by multiplying by 41
+  geom_histogram(binwidth=1, 
+                 fill="#66CC99",
+                 color="white") +
+  labs(title = "Frequency Distribution of Temperature for Year 2012", 
+       subtitle = "Measured temperature for year 2012 seemed to follow a bimodal \ndistribution. Most frequent temperatures recorded were at around\n14°C and 29°C.", 
+       caption = "Bikeshare data from 2011 & 2012", 
+       x = "Temperature °C", 
+       y = "Number of occurences",
+       fill = "Year") + # Legend Title
+  scale_y_continuous(breaks=c(0,5,10,15)) +
+  scale_x_continuous(breaks=c(0,5,10,15,20,25,30,35)) + # to force axis labels to stay as integers
+  theme(panel.border = element_blank(), 
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(), 
+        text = element_text(family="Palatino"),
+        axis.line = element_line(colour = "black"))
+
+```
+
+## Density plot
+* We would like to create an alternative visualization of the histogram above using a density plot, but for both years 2011 & 2012.
+* Kernel density plot may allow us to see the distribution of recorded temperature more effectively.
+```{r}
+ggplot(data=bikeshare, 
+       aes(x=temp*41, fill=yr_format)) + # De-normalize Temperature by multiplying by 41
+  geom_density(alpha=0.6, color=NA) +
+  labs(title = "Density Plot of Measured Temperature (2011 & 2012)", 
+       subtitle = "The measured temperature for both years followed a bimodal\ndistribution. Most frequent temperatures recorded peaked at\naround 13-14°C and 29°C.", 
+       caption = "Bikeshare data from 2011 & 2012", 
+       x = "Temperature °C", 
+       y = "Density",
+       fill = "Year") + # Legend Title
+  scale_fill_manual(values=c("#9999CC", "#66CC99")) +
+  scale_x_continuous(breaks=c(0,5,10,15,20,25,30,35)) + # to force axis labels to stay as integers
+  theme(panel.border = element_blank(), 
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(), 
+        panel.background = element_blank(), 
+        text = element_text(family="Palatino"),
+        axis.line = element_line(colour = "black"))
+```
+
+## Boxplot
+```{r}
+# Format season variable: Change to more meaningful values
+bikeshare$season_format<-NA
+bikeshare <- bikeshare %>% mutate(bikeshare, season_format = as.factor(ifelse(season %in% "1", "Winter",
+                                                            ifelse(season %in% "2", "Spring",
+                                                            ifelse(season %in% "3", "Summer",
+                                                            ifelse(season %in% "4", "Fall", NA))))))
+# Re-level
+bikeshare$season_format<-factor(bikeshare$season_format, levels=c("Winter", "Spring", "Summer", "Fall"))
+
+ggplot(data=bikeshare, 
+       aes(x=season_format, y=atemp*41, fill=season_format)) + # De-normalize Feeling Temperature by multiplying by 41
+  geom_boxplot() +
+  labs(title = "Boxplot of Temperature by Season (2011 & 2012)", 
+       subtitle = "Summer had the highest recorded (feeling) temperatures, and \nWinter had the lowest. We can also see that summer had \nthe most number of outliers & widest range recorded.", 
+       caption = "Bikeshare data from 2011 & 2012", 
+       x = "Season", 
+       y = "Temperature °C (Feeling)",
+       fill = "Season") + # Legend Title
+  scale_fill_manual(values=c("#9999CC", "#66CC99", "#FFFFCC", "#E6BA95")) +
+  #scale_x_continuous(breaks=c(0,5,10,15,20,25,30,35)) + # to force axis labels to stay as integers
+  theme(panel.border = element_blank(), 
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(), 
+        panel.background = element_blank(), 
+        text = element_text(family="Palatino"),
+        axis.line = element_line(colour = "black"))
+```
+
+## Scatterplot
+```{r}
+ggplot(data=bikeshare, 
+       aes(x=temp*41, y=cnt)) + # De-normalize Feeling Temperature by multiplying by 41
+  geom_point(aes(color=season_format), size=1) +
+  geom_smooth(method=lm, se=FALSE) +
+  labs(title = "Temperature & Use of Rental Bikes", 
+       subtitle = "As the temperature increased, so did the number of rental bike\nusers. Summer saw a very high number of users, and the least\nnumber during winter.", 
+       caption = "Bikeshare data from 2011 & 2012", 
+       x = "Temperature °C", 
+       y = "Total Number of Users",
+       color = "Season") + # Legend Title
+  scale_fill_manual(values=c("#9999CC", "#66CC99", "#FFFFCC", "#E6BA95")) +
+  #scale_x_continuous(breaks=c(0,5,10,15,20,25,30,35)) + # to force axis labels to stay as integers
+  theme(panel.border = element_blank(), 
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(), 
+        text = element_text(family="Palatino"),
+        #panel.background = element_blank(), 
+        axis.line = element_line(colour = "black"))
+```
+
